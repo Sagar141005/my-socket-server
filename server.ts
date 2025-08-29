@@ -105,8 +105,8 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("code-change", ({ roomId, fileId, code }) => {
-    socket.to(roomId).emit("code-update", { fileId, code });
+  socket.on("code-change", ({ roomId, fileId, code, senderId }) => {
+    socket.to(roomId).emit("code-update", { fileId, code, senderId });
   });
 
   socket.on("file-add", ({ roomId, file }) => {
