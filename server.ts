@@ -5,6 +5,7 @@ import express from "express";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
+import execRouter from "./routes/exec";
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(
     origin: allowedOrigins,
   })
 );
+app.use(express.json());
 
 const httpServer = createServer(app);
 
@@ -26,7 +28,8 @@ const io = new SocketIOServer(httpServer, {
   },
   path: "/api/socket",
 });
-// Paste all your socket event handling logic here from your Next.js API file
+app.use("/api/exec", execRouter);
+
 const roomUsers: Record<
   string,
   Map<
