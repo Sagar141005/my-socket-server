@@ -9,11 +9,11 @@ import cors from "cors";
 const app = express();
 
 const PORT = process.env.PORT || 3001;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "*";
+const allowedOrigins = JSON.parse(process.env.FRONTEND_ORIGIN || "[]");
 
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
+    origin: allowedOrigins,
   })
 );
 
@@ -21,12 +21,11 @@ const httpServer = createServer(app);
 
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: FRONTEND_ORIGIN, // same as above
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
   },
-  path: "/api/socket", // optional, but keep consistent
+  path: "/api/socket",
 });
-
 // Paste all your socket event handling logic here from your Next.js API file
 const roomUsers: Record<
   string,
