@@ -1,5 +1,0 @@
-FROM gcc:12
-
-WORKDIR /code
-
-CMD ["/bin/bash"]

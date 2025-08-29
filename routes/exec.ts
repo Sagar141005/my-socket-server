@@ -1,8 +1,4 @@
 import { Router } from "express";
-import fs from "fs";
-import path from "path";
-import util from "util";
-import os from "os";
 import * as esprima from "esprima";
 import {
   checkJavaScript,
@@ -11,104 +7,53 @@ import {
   checkJava,
 } from "../lib/codeCheckers";
 
-const exec = util.promisify(require("child_process").exec);
 const router = Router();
 
-async function runCodeInDocker(
+async function runCode(
   language: string,
   files?: Record<string, string>,
   entry?: string,
   code?: string
-) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codesandbox-"));
+): Promise<{ stdout: string; stderr: string }> {
+  const pistonLangs: Record<string, { language: string; version: string }> = {
+    python: { language: "python", version: "3.10.0" },
+    javascript: { language: "javascript", version: "18.15.0" },
+    node: { language: "javascript", version: "18.15.0" },
+    c: { language: "c", version: "10.2.0" },
+    cpp: { language: "cpp", version: "10.2.0" },
+    java: { language: "java", version: "15.0.2" },
+  };
 
-  try {
-    if (files && entry) {
-      for (const [filename, content] of Object.entries(files)) {
-        fs.writeFileSync(path.join(tempDir, filename), content);
-      }
-    } else if (code) {
-      let filename = "";
-      switch (language) {
-        case "python":
-          filename = "main.py";
-          break;
-        case "c":
-          filename = "program.c";
-          break;
-        case "cpp":
-          filename = "program.cpp";
-          break;
-        case "java":
-          filename = "Main.java";
-          break;
-        case "node":
-        case "javascript":
-          filename = "main.js";
-          break;
-        default:
-          throw new Error(`Unsupported language: ${language}`);
-      }
-      fs.writeFileSync(path.join(tempDir, filename), code);
-      entry = filename;
-    }
-
-    const images = {
-      python: "codesphere/python:latest",
-      node: "codesphere/node:latest",
-      javascript: "codesphere/node:latest",
-      c: "codesphere/cgcc:latest",
-      cpp: "codesphere/cgcc:latest",
-      java: "codesphere/java:latest",
-    };
-
-    const image = images[language as keyof typeof images];
-    const entryFile = entry!;
-    let dockerCmd = "";
-
-    switch (language) {
-      case "python":
-        dockerCmd = `python3 ${entryFile}`;
-        break;
-      case "node":
-      case "javascript":
-        dockerCmd = `node ${entryFile}`;
-        break;
-      case "c":
-        dockerCmd = `bash -c "gcc *.c -o program.out && ./program.out"`;
-        break;
-      case "cpp":
-        dockerCmd = `bash -c "g++ *.cpp -o program.out && ./program.out"`;
-        break;
-      case "java":
-        const mainClass = entryFile.replace(/\.java$/, "");
-        dockerCmd = `bash -c "javac *.java && java ${mainClass}"`;
-        break;
-      default:
-        throw new Error(`Unsupported language: ${language}`);
-    }
-
-    const fullCmd = `docker run --rm --network none --memory=256m --cpus=".5" -v ${tempDir}:/code -w /code ${image} ${dockerCmd}`;
-
-    let stdout = "",
-      stderr = "";
-
-    try {
-      const result = await exec(fullCmd, { timeout: 5000 });
-      stdout = result.stdout;
-      stderr = result.stderr;
-    } catch (err: any) {
-      if (err.killed) {
-        return { stdout: "", stderr: "Execution timed out after 5 seconds." };
-      } else {
-        stderr = err.stderr || "Unknown execution error.";
-      }
-    }
-
-    return { stdout, stderr };
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  const pistonLang = pistonLangs[language];
+  if (!pistonLang) {
+    throw new Error(`Unsupported language: ${language}`);
   }
+
+  const mainCode = code || (entry && files?.[entry]) || "";
+  const pistonFiles = files
+    ? Object.entries(files).map(([name, content]) => ({ name, content }))
+    : [{ name: entry || "main", content: mainCode }];
+
+  const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      language: pistonLang.language,
+      version: pistonLang.version,
+      files: pistonFiles,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Piston API request failed with status ${res.status}`);
+  }
+
+  const result = await res.json();
+
+  return {
+    stdout: result.run.stdout || "",
+    stderr: result.run.stderr || "",
+  };
 }
 
 router.post("/", async (req, res) => {
@@ -217,7 +162,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const result = await runCodeInDocker(language, files, entry, code);
+    const result = await runCode(language, files, entry, code);
 
     const stdout = result.stdout.trim();
     const stderr = result.stderr.trim();
