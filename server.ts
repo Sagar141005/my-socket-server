@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import execRouter from "./routes/exec";
+import pingRouter from "./routes/ping";
 
 const app = express();
 
@@ -29,6 +30,7 @@ const io = new SocketIOServer(httpServer, {
   path: "/api/socket",
 });
 app.use("/api/exec", execRouter);
+app.use("/api/ping", pingRouter);
 
 const roomUsers: Record<
   string,
